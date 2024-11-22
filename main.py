@@ -1,14 +1,14 @@
-import requests
-import discord
 import asyncio
 import json
 import logging
 import logging.handlers
-from discord.ext import commands, tasks
-from datetime import *
 import os
 import sys
+from datetime import datetime, timezone
 
+import discord
+import requests
+from discord.ext import commands
 
 logger = logging.getLogger("discord")
 logger.setLevel(logging.DEBUG)
@@ -41,9 +41,11 @@ def get_prefix(client, message):
     return config["servers"][str(message.guild.id)]["prefix"], "n!"
 
 
-intents = discord.Intents.all()
+intents = discord.Intents.default()
+intents.message_content = True
 startupDate = datetime.now(timezone.utc)
 bot = commands.Bot(command_prefix=get_prefix, help_command=None, intents=intents)
+# tree = discord.app_commands.CommandTree(bot)
 
 
 def beautifyDateDelta(date):
@@ -64,7 +66,9 @@ def beautifyDateDelta(date):
 @bot.event
 async def on_ready():
     activity = discord.Game(name="n!help")
+    await bot.tree.sync()
     await bot.change_presence(status=discord.Status.online, activity=activity)
+    # await tree.sync()
     print(f"[{startupDate.isoformat(sep=' ')}] Notify Chan is online now!")
 
 
@@ -91,7 +95,7 @@ async def on_guild_remove(guild):
 
 
 @bot.command()
-async def onjoin(ctx):
+async def onjoin(ctx: commands.Context):
     config["servers"][str(ctx.guild.id)]["joinMessageChannel"] = str(ctx.channel.id)
     if message == None:
         message = "{} just joined the server! Welcome!☺✋"
@@ -104,7 +108,7 @@ async def onjoin(ctx):
 
 
 @bot.command()
-async def onjoindel(ctx):
+async def onjoindel(ctx: commands.Context):
     del config["servers"][str(ctx.guild.id)]["joinMessageChannel"]
     del config["servers"][str(ctx.guild.id)]["joinMessage"]
     writeConfig()
@@ -136,7 +140,7 @@ async def onleave(ctx, message=None):
 
 
 @bot.command()
-async def onleavedel(ctx):
+async def onleavedel(ctx: commands.Context):
     del config["servers"][str(ctx.guild.id)]["leaveMessageChannel"]
     del config["servers"][str(ctx.guild.id)]["leaveMessage"]
     writeConfig()
@@ -158,26 +162,26 @@ async def on_member_remove(Member):
 
 
 @bot.group(invoke_without_command=True)
-async def help(ctx):
+async def help(ctx: commands.Context):
     prefix = get_prefix(bot, ctx)[1]
     embed = discord.Embed(
         title="Hi👋 My name is `Notify Chan`! \nHere's my commands:", color=embedColor
     )
     embed.add_field(
         name="`twadd` to add twitch channel",
-        value=(f"Sample: `n!twadd zxcursed`"),
+        value=("Sample: `n!twadd streamer`"),
         inline=False,
     )
     embed.add_field(
         name="",
         value=(
-            f"To mention streamer while creating message use `$user`\nSample: $user is live!."
+            "To mention streamer while creating message use `$user`\nSample: $user is live!."
         ),
         inline=False,
     )
     embed.add_field(
         name="`twdel` to remove twitch channel",
-        value=(f"Sample: `n!twdel zxcursed`"),
+        value=("Sample: `n!twdel streamer`"),
         inline=False,
     )
     embed.add_field(name="`twlist` to show all tracking channels", value="", inline=False)
@@ -212,8 +216,13 @@ async def help(ctx):
     await ctx.send(embed=embed)
 
 
+@bot.hybrid_command(name="test", description="Test!", with_app_command=True)
+async def test(ctx: commands.Context):
+    await ctx.send('test')
+
+
 @bot.command(pass_context=True)
-async def status(ctx):
+async def status(ctx: commands.Context):
     botOnlineDuration = beautifyDateDelta(startupDate)
     serverCount = len(config["servers"])
     embed = discord.Embed(
@@ -422,7 +431,7 @@ async def twdel(ctx, streamerUsername=None):
 
 
 @bot.command()
-async def twlist(ctx):
+async def twlist(ctx: commands.Context):
     message = "**Streamers:**"
     for streamerUsername in config["twitch"]:
         try:
@@ -484,6 +493,7 @@ async def send_notification(streamerUsername):
 
 
 async def send_notifications():
+    """Using time loop to check twitch channels"""
     while not bot.is_closed():
         try:
             timeout = 60
@@ -501,6 +511,7 @@ async def send_notifications():
 
 
 async def main():
+    """Initiate async bot"""
     notification_task = asyncio.create_task(send_notifications())
     await bot.start(config["token"])
     await notification_task
